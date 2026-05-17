@@ -1,0 +1,12 @@
+{
+  "name": "@jobguard/data",
+  "version": "0.1.0",
+  "private": true,
+  "description": "求職門神資料 pipeline（抓政府開放資料）",
+  "type": "module",
+  "scripts": {
+    "fetch:ntpc-labor": "node scripts/fetch-ntpc-labor.mjs",
+    "build:violations": "node scripts/build-violations-index.mjs",
+    "copy:docs": "node scripts/copy-to-docs.mjs"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "jobguard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "求職門神 - 在求職網站浮現公司風險資訊",
+  "type": "module",
+  "scripts": {
+    "lint": "echo TODO-lint",
+    "typecheck": "echo TODO-typecheck",
+    "test": "echo TODO-test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

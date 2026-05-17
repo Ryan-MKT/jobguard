@@ -1,0 +1,7 @@
+{
+  "name": "@jobguard/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "求職門神 Chrome 擴充功能",
+  "type": "module"
+}

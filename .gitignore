@@ -1,0 +1,29 @@
+# 套件資料夾（超大，每個人 pnpm install 都會自動產生，不需要存）
+node_modules/
+
+# 編譯產出物
+dist/
+build/
+*.tsbuildinfo
+
+# 環境變數（含密碼，千萬不能上傳）
+.env
+.env.local
+.env.*.local
+
+# 編輯器設定
+.vscode/
+.idea/
+*.swp
+
+# 系統垃圾檔
+.DS_Store
+Thumbs.db
+
+# 日誌
+*.log
+logs/
+
+# 暫存 / 原始下載資料
+data/raw/
+*.tmp
