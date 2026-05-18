@@ -1,24 +1,25 @@
 // ============================================
-// 抓勞動部全國違反勞動法令資料
+// 抓勞動部全國違反勞動法令資料 v2 - 通用容錯版
 // ============================================
 //
-// 來源：announcement.mol.gov.tw (勞動部全國彙整)
-// 涵蓋：22 縣市 + 4 個科學園區 + 中央機關
-// 法令：9 種（勞基、性平、職安、就服、退休金、勞職保、工會、最低工資、中高齡）
-//
-// 跑法：pnpm --filter @jobguard/data fetch:mol
+// 用 lib/ 共用工具：
+//   - csv-parser: 三層解析
+//   - fetch-robust: 失敗自動分段重試
+//   - law-classifier: 改良分類規則
+//   - date-range: 民國年/西元轉換
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import AdmZip from 'adm-zip';
-import { parse as parseCsv } from 'csv-parse/sync';
+import { fetchWithFallback } from './lib/fetch-robust.mjs';
+import { mingooToWestern } from './lib/date-range.mjs';
+import { detectLawType } from './lib/law-classifier.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'raw');
 const OUT_FILE = join(OUT_DIR, 'mol-national.json');
 
-// 全台 22 縣市 + 科學園區
 const CITIES = [
   { code: '63', name: '台北市' },
   { code: '65', name: '新北市' },
@@ -48,16 +49,15 @@ const CITIES = [
   { code: '95', name: '南部科學園區' },
 ];
 
-// 查詢日期區間（民國年）2020-01-01 ~ 2025-12-31
 const DATE_START = '1090101';
 const DATE_END = '1141231';
 
 // ============================================
-// 工具：從 HTML 抓 CSRF + 拿 cookie
+// 取 CSRF + cookie
 // ============================================
 async function getCsrfAndCookie() {
   const res = await fetch('https://announcement.mol.gov.tw/', {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobGuard/0.1)' },
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobGuard/0.2)' },
   });
   const html = await res.text();
   const tokenMatch = html.match(/name="_csrf_token"\s+value="([^"]+)"/);
@@ -68,150 +68,94 @@ async function getCsrfAndCookie() {
 }
 
 // ============================================
-// 下載單一縣市 ZIP
+// 下載某縣市某時段的 ZIP，回傳 CSV 字串陣列
 // ============================================
-async function downloadCity(city, csrfToken, cookie) {
-  const body = new URLSearchParams({
-    _csrf_token: csrfToken,
-    CITYNO: city.code,
-    UNITNAME: '',
-    REGNUMBER: '',
-    REGNO: '',
-    FINE: '',
-    DOCstartDate: DATE_START,
-    DOCEndDate: DATE_END,
-    downloadType: '3',
-    Page1: '1',
-    Page2: '1',
-    Page3: '1',
-    sortName1: '',
-    sortName2: '',
-    sortName3: '',
-  });
+function makeFetcher(csrfToken, cookie) {
+  return async function fetchCityCsvs(city, startDate, endDate) {
+    const body = new URLSearchParams({
+      _csrf_token: csrfToken,
+      CITYNO: city.code,
+      UNITNAME: '',
+      REGNUMBER: '',
+      REGNO: '',
+      FINE: '',
+      DOCstartDate: startDate,
+      DOCEndDate: endDate,
+      downloadType: '3',
+      Page1: '1',
+      Page2: '1',
+      Page3: '1',
+      sortName1: '',
+      sortName2: '',
+      sortName3: '',
+    });
 
-  const res = await fetch('https://announcement.mol.gov.tw/Download/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Referer': 'https://announcement.mol.gov.tw/',
-      Cookie: cookie,
-      'User-Agent': 'Mozilla/5.0 (compatible; JobGuard/0.1)',
-    },
-    body,
-  });
+    const res = await fetch('https://announcement.mol.gov.tw/Download/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Referer: 'https://announcement.mol.gov.tw/',
+        Cookie: cookie,
+        'User-Agent': 'Mozilla/5.0 (compatible; JobGuard/0.2)',
+      },
+      body,
+    });
 
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${city.name}`);
-  const buf = Buffer.from(await res.arrayBuffer());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
 
-  // 檢查是否真的拿到 ZIP（PK magic bytes）
-  if (buf.length < 10 || buf[0] !== 0x50 || buf[1] !== 0x4b) {
-    return []; // 該縣市無資料
-  }
-
-  return extractCsvs(buf);
-}
-
-// ============================================
-// 解 ZIP → 取出所有 CSV 內容
-// ============================================
-function extractCsvs(zipBuffer) {
-  const zip = new AdmZip(zipBuffer);
-  const entries = zip.getEntries();
-  const csvs = [];
-  for (const entry of entries) {
-    if (!entry.entryName.endsWith('.csv')) continue;
-    // 勞動部 CSV 是 UTF-8 with BOM
-    const text = entry.getData().toString('utf-8');
-    csvs.push(text);
-  }
-  return csvs;
-}
-
-// ============================================
-// 解析 CSV 為記錄
-// ============================================
-function parseAndNormalize(csvText, cityName) {
-  // 移除 BOM、跳過第一行「違反雇主清冊」標題
-  const text = csvText.replace(/^﻿/, '');
-  const lines = text.split(/\r?\n/);
-  // 找到真正的欄位 header 行（含「編號」）
-  let headerIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes('"編號"')) {
-      headerIdx = i;
-      break;
+    // 非 ZIP（可能是「請輸入搜尋條件」之類）
+    if (buf.length < 10 || buf[0] !== 0x50 || buf[1] !== 0x4b) {
+      return [];
     }
-  }
-  if (headerIdx === -1) return [];
 
-  const csvBody = lines.slice(headerIdx).join('\n');
-
-  let records;
-  try {
-    records = parseCsv(csvBody, {
-      columns: true,
-      skip_empty_lines: true,
-      relax_column_count: true,
-      trim: true,
-    });
-  } catch (e) {
-    console.warn(`     CSV 解析失敗: ${e.message}`);
-    return [];
-  }
-
-  const out = [];
-  for (const r of records) {
-    const name = (r['事業單位名稱(負責人)\n自然人姓名'] ||
-                  r['事業單位名稱(負責人)自然人姓名'] || '').trim();
-    if (!name) continue;
-    // 民國年/月/日 → 西元
-    const date = mingooToWestern(r['處分日期']);
-    const law = (r['違反法規條款'] || '').trim();
-    const lawType = detectLawType(law);
-
-    // 罰款金額（可能是「150,000」字串）
-    const amtRaw = (r['罰鍰金額'] || r['處分金額／滯納金'] || r['處分金額'] || '').toString();
-    const amount = parseInt(amtRaw.replace(/[^\d]/g, ''), 10) || 0;
-
-    out.push({
-      city: cityName,
-      name,
-      date,
-      law,
-      lawType,
-      lawcontent: (r['法條敘述'] || '').trim(),
-      docno: (r['處分字號'] || '').trim(),
-      amt_dollartwd: amount.toString(),
-      announceDate: mingooToWestern(r['公告日期']),
-    });
-  }
-  return out;
+    // 解 ZIP 取出 CSVs
+    const zip = new AdmZip(buf);
+    return zip
+      .getEntries()
+      .filter((e) => e.entryName.endsWith('.csv'))
+      .map((e) => {
+        const text = e.getData().toString('utf-8');
+        // 移除 BOM、剪掉第一行「違反雇主清冊」標題
+        const cleaned = text.replace(/^﻿/, '');
+        const lines = cleaned.split(/\r?\n/);
+        const headerIdx = lines.findIndex((l) => l.includes('"編號"'));
+        return headerIdx >= 0 ? lines.slice(headerIdx).join('\n') : cleaned;
+      });
+  };
 }
 
-// 民國 115/02/05 → 2026-02-05
-function mingooToWestern(s) {
-  if (!s) return '';
-  const m = s.match(/^(\d{2,3})\/(\d{1,2})\/(\d{1,2})/);
-  if (!m) return s;
-  const year = parseInt(m[1], 10) + 1911;
-  const month = m[2].padStart(2, '0');
-  const day = m[3].padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+// ============================================
+// 解析記錄 → 統一 schema
+// ============================================
+function normalizeRecord(rec, cityName) {
+  const name = (
+    rec['事業單位名稱(負責人)\n自然人姓名'] ||
+    rec['事業單位名稱(負責人)自然人姓名'] ||
+    ''
+  ).trim();
+  if (!name) return null;
 
-// 從「違反法規條款」文字判斷法令類型
-function detectLawType(law) {
-  if (!law) return '其他';
-  if (law.includes('勞動基準法')) return '勞動基準法';
-  if (law.includes('性別')) return '性別平等工作法';
-  if (law.includes('職業安全衛生') || law.includes('營造安全')) return '職業安全衛生法';
-  if (law.includes('勞工退休金')) return '勞工退休金條例';
-  if (law.includes('就業服務')) return '就業服務法';
-  if (law.includes('勞工職業災害') || law.includes('勞工保險')) return '勞工職業災害保險及保護法';
-  if (law.includes('工會法')) return '工會法';
-  if (law.includes('最低工資')) return '最低工資法';
-  if (law.includes('中高齡')) return '中高齡者及高齡者就業促進法';
-  return '其他';
+  const law = (rec['違反法規條款'] || '').trim();
+  const amtRaw = (
+    rec['罰鍰金額'] ||
+    rec['處分金額／滯納金'] ||
+    rec['處分金額'] ||
+    ''
+  ).toString();
+  const amount = parseInt(amtRaw.replace(/[^\d]/g, ''), 10) || 0;
+
+  return {
+    city: cityName,
+    name,
+    date: mingooToWestern(rec['處分日期']),
+    law,
+    lawType: detectLawType(law),
+    lawcontent: (rec['法條敘述'] || '').trim(),
+    docno: (rec['處分字號'] || '').trim(),
+    amt_dollartwd: amount.toString(),
+    announceDate: mingooToWestern(rec['公告日期']),
+  };
 }
 
 // ============================================
@@ -220,48 +164,60 @@ function detectLawType(law) {
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
-  console.log('🚀 開始抓勞動部全國資料');
+  console.log('🚀 抓勞動部全國資料 v2（通用容錯）');
   console.log(`📅 期間：民國 ${DATE_START} ~ ${DATE_END}`);
   console.log(`🌍 涵蓋：${CITIES.length} 個地區`);
   console.log('============================================');
 
-  console.log('🔑 取 CSRF token + cookie...');
   const { csrfToken, cookie } = await getCsrfAndCookie();
-  console.log(`   token: ${csrfToken.slice(0, 30)}...`);
+  console.log(`🔑 CSRF: ${csrfToken.slice(0, 30)}...`);
+  console.log('');
 
+  const fetchCityCsvs = makeFetcher(csrfToken, cookie);
   const all = [];
-  const stats = {};
+  const reports = [];
 
   for (let i = 0; i < CITIES.length; i++) {
     const city = CITIES[i];
-    process.stdout.write(`📥 [${i + 1}/${CITIES.length}] ${city.name.padEnd(10)} `);
+    const padded = city.name.padEnd(10);
+    process.stdout.write(`📥 [${(i + 1).toString().padStart(2)}/${CITIES.length}] ${padded} `);
 
     try {
-      const csvs = await downloadCity(city, csrfToken, cookie);
+      const result = await fetchWithFallback(
+        city,
+        DATE_START,
+        DATE_END,
+        fetchCityCsvs
+      );
+
       let cityCount = 0;
-      for (const csv of csvs) {
-        const records = parseAndNormalize(csv, city.name);
-        all.push(...records);
-        cityCount += records.length;
+      for (const rec of result.records) {
+        const norm = normalizeRecord(rec, city.name);
+        if (norm) all.push(norm);
+        if (norm) cityCount++;
       }
-      stats[city.name] = cityCount;
-      console.log(`${cityCount.toString().padStart(5)} 筆`);
+
+      const strategyTag =
+        result.strategy === 'strict'
+          ? '  '
+          : result.strategy.startsWith('seg')
+            ? ' ⚠'
+            : ' △';
+      console.log(`${cityCount.toString().padStart(5)} 筆${strategyTag} (${result.strategy})`);
+      reports.push({ city: city.name, count: cityCount, strategy: result.strategy, errors: result.errors });
     } catch (err) {
       console.log(`❌ ${err.message}`);
-      stats[city.name] = 0;
+      reports.push({ city: city.name, count: 0, strategy: 'error', errors: [err.message] });
     }
 
-    // 禮貌間隔
-    if (i < CITIES.length - 1) {
-      await new Promise((r) => setTimeout(r, 500));
-    }
+    if (i < CITIES.length - 1) await new Promise((r) => setTimeout(r, 500));
   }
 
   await writeFile(OUT_FILE, JSON.stringify(all, null, 2), 'utf-8');
 
   console.log('');
   console.log('============================================');
-  console.log(`✅ 完成！共 ${all.length.toLocaleString()} 筆`);
+  console.log(`✅ 總計 ${all.length.toLocaleString()} 筆`);
   console.log(`💾 ${OUT_FILE}`);
   console.log('============================================');
 
@@ -270,7 +226,17 @@ async function main() {
   for (const r of all) byLawType[r.lawType] = (byLawType[r.lawType] || 0) + 1;
   console.log('\n📊 各法令類型筆數：');
   for (const [t, c] of Object.entries(byLawType).sort((a, b) => b[1] - a[1])) {
-    console.log(`   ${t.padEnd(20)} ${c.toLocaleString()}`);
+    console.log(`   ${t.padEnd(22)} ${c.toLocaleString()}`);
+  }
+
+  // 各縣市策略報告
+  console.log('\n📋 縣市抓取策略：');
+  for (const r of reports) {
+    if (r.strategy === 'strict') continue; // 正常的不印
+    console.log(`   ${r.city.padEnd(10)} ${r.count.toString().padStart(5)} 筆  策略=${r.strategy}`);
+    if (r.errors.length > 0) {
+      console.log(`     ↳ ${r.errors[0]}`);
+    }
   }
 }
 
