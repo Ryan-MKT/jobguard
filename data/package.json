@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "fetch:ntpc-labor": "node scripts/fetch-ntpc-labor.mjs",
+    "fetch:ntpc-laws": "node scripts/fetch-ntpc-laws.mjs",
     "build:violations": "node scripts/build-violations-index.mjs",
-    "copy:docs": "node scripts/copy-to-docs.mjs"
+    "copy:docs": "node scripts/copy-to-docs.mjs",
+    "update:all": "node scripts/fetch-ntpc-laws.mjs && node scripts/build-violations-index.mjs && node scripts/copy-to-docs.mjs"
   }
 }

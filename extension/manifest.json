@@ -17,14 +17,25 @@
       "128": "icons/icon-128.png"
     }
   },
-  "host_permissions": [
-    "*://*.104.com.tw/*"
+  "permissions": [
+    "storage",
+    "alarms"
   ],
+  "host_permissions": [
+    "*://*.104.com.tw/*",
+    "https://ryan-mkt.github.io/*",
+    "https://news.google.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": ["*://*.104.com.tw/*"],
       "js": [
         "content/parsers/104.js",
+        "content/overlay.js",
         "content/index.js"
       ],
       "run_at": "document_idle"
