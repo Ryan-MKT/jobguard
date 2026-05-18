@@ -167,6 +167,24 @@
       font-size: 11px;
       color: #888;
     }
+    .law-chips {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .law-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 9px;
+      background: #fff;
+      border: 1px solid #f0d0d0;
+      border-radius: 11px;
+      font-size: 11px;
+      color: #555;
+      font-weight: 500;
+    }
     .news-item {
       display: block;
       padding: 12px 14px;
@@ -286,6 +304,20 @@
     `;
 
     if (match) {
+      // 法令分類 chips
+      let lawChips = '';
+      if (match.byLawType) {
+        const lawIcons = {
+          '勞動基準法': '⚖️',
+          '性別工作平等法': '⚧️',
+          '職業安全衛生法': '🛠️',
+        };
+        for (const [law, count] of Object.entries(match.byLawType)) {
+          const icon = lawIcons[law] || '📋';
+          lawChips += `<span class="law-chip">${icon} ${escapeHtml(law)} ${count}</span>`;
+        }
+      }
+
       html += `
         <div class="section">
           <h3>⚖️ 政府裁罰紀錄</h3>
@@ -293,6 +325,7 @@
             <div class="violation-count">${match.count} 次違規</div>
             <div class="violation-detail">累計罰款 NT$ ${match.totalFine.toLocaleString()}</div>
             <div class="violation-meta">最近違規日：${escapeHtml(match.latestDate)}</div>
+            ${lawChips ? `<div class="law-chips">${lawChips}</div>` : ''}
             <div class="violation-meta">比對「${escapeHtml(match.matchedKey)}」(${match.matchType}, 信心 ${(match.confidence * 100).toFixed(0)}%)</div>
           </div>
         </div>
