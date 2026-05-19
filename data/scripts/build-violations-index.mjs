@@ -131,7 +131,9 @@ async function main() {
   };
 
   await mkdir(OUT_DIR, { recursive: true });
-  await writeFile(OUT_FILE, JSON.stringify(output, null, 2), 'utf-8');
+  // 不 pretty-print，把檔案從 ~50MB 壓到 ~30MB
+  // 反正是給 extension 程式讀的、不是人肉看的，省下的空間給未來資料成長用
+  await writeFile(OUT_FILE, JSON.stringify(output), 'utf-8');
 
   console.log('');
   console.log(`💾 ${OUT_FILE}`);
