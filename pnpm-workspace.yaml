@@ -2,3 +2,4 @@ packages:
   - 'packages/*'
   - 'extension'
   - 'data'
+  - 'health-check'

@@ -1,0 +1,14 @@
+{
+  "name": "@jobguard/health-check",
+  "version": "0.1.0",
+  "private": true,
+  "description": "求職門神自動健檢 - 每天驗證 104 parser 是否還能正常抓到公司",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-104.mjs",
+    "install:browsers": "playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

@@ -1,0 +1,81 @@
+name: Daily Health Check
+
+on:
+  schedule:
+    # 每天 UTC 23:00 = 台灣早上 07:00
+    - cron: '0 23 * * *'
+  workflow_dispatch:  # 允許手動觸發
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm -F @jobguard/health-check exec playwright install --with-deps chromium
+
+      - name: Run health check
+        id: check
+        run: pnpm -F @jobguard/health-check check
+        continue-on-error: true
+
+      - name: Upload debug screenshot (on failure)
+        if: steps.check.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshot
+          path: health-check/debug-failure.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Build LINE message
+        if: steps.check.outcome == 'failure'
+        id: build_msg
+        run: |
+          SUMMARY=$(cat health-check/failure-summary.txt 2>/dev/null || echo "(無摘要)")
+          NOW=$(TZ=Asia/Taipei date +'%Y-%m-%d %H:%M')
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          {
+            echo "msg<<MSG_EOF"
+            echo "🚨 104 健檢失敗"
+            echo ""
+            echo "⏰ 時間：${NOW}"
+            echo "📦 Commit：${GITHUB_SHA:0:7}"
+            echo ""
+            echo "❌ 失敗項目："
+            echo "${SUMMARY}"
+            echo ""
+            echo "🔗 Log: ${RUN_URL}"
+            echo "MSG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Notify LINE on failure
+        if: steps.check.outcome == 'failure'
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          LINE_MESSAGE: ${{ steps.build_msg.outputs.msg }}
+        run: pnpm -F @jobguard/health-check exec node scripts/notify-line.mjs
+
+      - name: Exit with failure if check failed
+        if: steps.check.outcome == 'failure'
+        run: exit 1

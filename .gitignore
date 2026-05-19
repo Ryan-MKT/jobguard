@@ -27,3 +27,7 @@ logs/
 # 暫存 / 原始下載資料
 data/raw/
 *.tmp
+
+# 健檢執行產物
+health-check/debug-failure.png
+health-check/failure-summary.txt
