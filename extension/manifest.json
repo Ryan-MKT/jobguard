@@ -23,6 +23,12 @@
   ],
   "host_permissions": [
     "*://*.104.com.tw/*",
+    "*://*.1111.com.tw/*",
+    "*://*.yourator.co/*",
+    "*://*.518.com.tw/*",
+    "*://*.yes123.com.tw/*",
+    "*://*.cake.me/*",
+    "*://*.cakeresume.com/*",
     "https://ryan-mkt.github.io/*",
     "https://news.google.com/*"
   ],
@@ -32,9 +38,24 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.104.com.tw/*"],
+      "matches": [
+        "*://*.104.com.tw/*",
+        "*://*.1111.com.tw/*",
+        "*://*.yourator.co/*",
+        "*://*.518.com.tw/*",
+        "*://*.yes123.com.tw/*",
+        "*://*.cake.me/*",
+        "*://*.cakeresume.com/*"
+      ],
       "js": [
+        "content/settings.js",
+        "content/parsers/_common.js",
         "content/parsers/104.js",
+        "content/parsers/1111.js",
+        "content/parsers/yourator.js",
+        "content/parsers/518.js",
+        "content/parsers/yes123.js",
+        "content/parsers/cake.js",
         "content/overlay.js",
         "content/index.js"
       ],

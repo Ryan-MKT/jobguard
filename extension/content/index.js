@@ -1,42 +1,96 @@
 // ============================================
-// 求職門神 - Content Script 主入口（v1.4）
-// 加入 loading 狀態 + 全域進度
+// 求職門神 - Content Script 主入口（v1.6）
+// 多站台 parser registry + 啟動模式設定
 // ============================================
 
 (function () {
   console.log(
-    '%c🛡️ 求職門神 v0.1.0',
+    '%c🛡️ 求職門神 v1.0.2',
     'color: #fff; background: #e69138; padding: 4px 8px; border-radius: 4px; font-weight: bold;',
     location.href
   );
 
-  if (!location.href.includes('/jobs/search/')) return;
+  const common = window.__jobguard_parserCommon;
+  if (!common) {
+    console.error('[JobGuard] parser common module 未載入');
+    return;
+  }
 
-  // ⭐ 頁面一載入就立刻顯示啟動中圖示（不用等職缺渲染）
-  window.__jobguard_showProgress('🛡️ 求職門神 啟動中…');
+  const activeParser = common.findParser();
+  if (!activeParser) {
+    // 不是支援的網站搜尋頁，靜默退出
+    return;
+  }
 
-  let attempts = 0;
-  const MAX_ATTEMPTS = 30;
+  console.log(
+    `%c[JobGuard] 偵測到 ${activeParser.label}（${activeParser.id}）`,
+    'color: #e69138; font-weight: bold;'
+  );
 
-  const timer = setInterval(() => {
-    attempts++;
-    const companyLinkCount = document.querySelectorAll('a[href*="/company/"]').length;
+  let hasStarted = false;
 
-    if (companyLinkCount >= 10) {
-      clearInterval(timer);
-      setTimeout(() => {
-        runMatcher();
-        startObserver();
-      }, 800);
-    } else if (attempts >= MAX_ATTEMPTS) {
-      clearInterval(timer);
-      console.warn('⚠️ 等了太久沒看到足夠職缺');
-      window.__jobguard_showProgressDone('⚠️ 未偵測到職缺列表', { warn: true });
+  // 暴露給設定面板「⚡ 立刻分析此頁面」按鈕、popup 等使用
+  window.__jobguard_runScan = function (opts = {}) {
+    if (opts.force) hasStarted = false;
+    startScan();
+  };
+
+  // 監聽設定變化：手動 → 自動且尚未掃描時，立刻啟動
+  const settings = window.__jobguard_settings;
+  if (settings) {
+    settings.onChange((next) => {
+      if (next.scanMode === 'auto' && !hasStarted) {
+        window.__jobguard_hideManualTrigger?.();
+        startScan();
+      }
+    });
+
+    settings.load().then(({ scanMode }) => {
+      if (scanMode === 'manual') {
+        console.log('%c[JobGuard] 手動模式 — 等待使用者點擊', 'color: #e69138;');
+        window.__jobguard_showManualTrigger(() => startScan());
+      } else {
+        startScan();
+      }
+    });
+  } else {
+    console.warn('[JobGuard] settings 模組未載入，使用預設自動模式');
+    startScan();
+  }
+
+  function startScan() {
+    if (hasStarted) {
+      console.log('[JobGuard] 已啟動過，略過');
+      return;
     }
-  }, 500);
+    hasStarted = true;
+    window.__jobguard_hideManualTrigger?.();
+    window.__jobguard_showProgress('🛡️ 求職門神 啟動中…');
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 30;
+
+    const timer = setInterval(() => {
+      attempts++;
+      // 第一次嘗試用 parser 抓——只要抓得到資料就開始
+      const preview = activeParser.parse();
+
+      if (preview.length >= 3 || (attempts >= 10 && preview.length >= 1)) {
+        clearInterval(timer);
+        setTimeout(() => {
+          runMatcher();
+          startObserver();
+        }, 800);
+      } else if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(timer);
+        console.warn(`⚠️ [${activeParser.id}] 等了太久沒抓到公司連結（最終 ${preview.length} 個）`);
+        window.__jobguard_showProgressDone('⚠️ 未偵測到職缺列表', { warn: true });
+      }
+    }, 500);
+  }
 
   async function runMatcher() {
-    const allLinks = window.__jobguard_parse104();
+    const allLinks = activeParser.parse();
     if (allLinks.length === 0) return;
 
     const unprocessed = allLinks.filter(
@@ -59,7 +113,7 @@
 
     window.__jobguard_showProgress(`🛡️ 分析 ${uniqueNames.length} 家公司中...`);
     console.log(
-      `%c📋 ${unprocessed.length} 個職缺位置 (${uniqueNames.length} 家獨立公司)，查詢中...`,
+      `%c📋 [${activeParser.id}] ${unprocessed.length} 個職缺位置 (${uniqueNames.length} 家獨立公司)，查詢中...`,
       'color: #e69138; font-weight: bold;'
     );
 
@@ -87,7 +141,7 @@
     }
 
     console.log(
-      `%c🎨 注入 ${injected} 個徽章 | 🔴${stats.red} 🟡${stats.yellow} 🟢${stats.green} | ${elapsed}ms`,
+      `%c🎨 [${activeParser.id}] 注入 ${injected} 個徽章 | 🔴${stats.red} 🟡${stats.yellow} 🟢${stats.green} | ${elapsed}ms`,
       'color: #e69138; font-weight: bold;'
     );
 

@@ -241,6 +241,102 @@
     }
     .footer { padding:14px 24px 22px; border-top:1px solid #f0f0f0; }
     .footer p { margin:0; font-size:11px; color:#999; line-height:1.6; }
+
+    /* === 啟動模式（v1.0.2） === */
+    .scan-mode-options { display:flex; flex-direction:column; gap:8px; }
+    .scan-mode-option {
+      display:flex; align-items:flex-start; gap:10px;
+      padding:12px 14px; border-radius:10px;
+      background:#fafafa; border:1px solid #eee;
+      cursor:pointer; transition:background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .scan-mode-option:hover { background:#f5f5f5; border-color:#ddd; }
+    .scan-mode-option.active {
+      background:#fff5e6; border-color:#e69138;
+      box-shadow:0 0 0 1px #e69138 inset;
+    }
+    .scan-mode-option input[type="radio"] {
+      margin:2px 0 0; flex-shrink:0; accent-color:#e69138;
+      width:16px; height:16px; cursor:pointer;
+    }
+    .scan-mode-content { flex:1; }
+    .scan-mode-title {
+      font-size:14px; color:#333; font-weight:600;
+      display:flex; align-items:center; gap:8px;
+    }
+    .scan-mode-desc {
+      font-size:11px; color:#888; margin-top:3px; line-height:1.55;
+    }
+    .badge-recommended {
+      font-size:10px; background:#ffe0b2; color:#bf6a00;
+      padding:2px 8px; border-radius:10px; font-weight:600;
+    }
+    .run-now-btn {
+      display:flex; align-items:center; justify-content:center; gap:6px;
+      width:100%; margin-top:12px;
+      padding:11px 16px; border:0; border-radius:10px;
+      background:linear-gradient(135deg, #e69138, #d97706);
+      color:white; font-size:14px; font-weight:600;
+      cursor:pointer; transition:transform 0.15s, box-shadow 0.15s, filter 0.15s;
+      font-family:inherit;
+      box-shadow:0 4px 12px rgba(230, 145, 56, 0.3);
+    }
+    .run-now-btn:hover {
+      transform:translateY(-1px);
+      box-shadow:0 6px 16px rgba(230, 145, 56, 0.45);
+      filter:brightness(1.05);
+    }
+    .run-now-btn:active { transform:translateY(0); filter:brightness(0.95); }
+  `;
+
+  // ============================================
+  // 手動觸發按鈕 CSS（與右上角圖示同位置）
+  // ============================================
+  const MANUAL_TRIGGER_CSS = `
+    :host {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2147483646;
+      font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei",
+                   "PingFang TC", sans-serif;
+    }
+    .trigger {
+      background: linear-gradient(135deg, #e69138, #d97706);
+      color: white;
+      padding: 11px 18px;
+      border-radius: 24px;
+      box-shadow: 0 8px 24px rgba(230, 145, 56, 0.5);
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      animation: slideIn 0.3s ease, gentle-pulse 2.4s ease-in-out infinite;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    }
+    .trigger:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px rgba(230, 145, 56, 0.65);
+      filter: brightness(1.05);
+      animation-play-state: paused;
+    }
+    .trigger:active {
+      transform: translateY(0);
+      filter: brightness(0.95);
+    }
+    .shield { font-size: 16px; }
+    @keyframes slideIn {
+      from { transform: translateX(120%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes gentle-pulse {
+      0%, 100% { box-shadow: 0 8px 24px rgba(230, 145, 56, 0.5); }
+      50% { box-shadow: 0 8px 28px rgba(230, 145, 56, 0.75); }
+    }
   `;
 
   // ============================================
@@ -532,6 +628,36 @@
   }
 
   // ============================================
+  // 手動觸發按鈕（手動模式時顯示在右上角）
+  // ============================================
+  function showManualTrigger(onClick) {
+    hideManualTrigger();
+    const host = document.createElement('div');
+    host.id = 'jobguard-manual-trigger';
+    document.body.appendChild(host);
+
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
+      <style>${MANUAL_TRIGGER_CSS}</style>
+      <button class="trigger" type="button" title="求職門神：手動模式 — 點此開始分析此頁面">
+        <span class="shield">🛡️</span>
+        <span>點此分析此頁面</span>
+      </button>
+    `;
+
+    shadow.querySelector('.trigger').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      hideManualTrigger();
+      if (typeof onClick === 'function') onClick();
+    });
+  }
+
+  function hideManualTrigger() {
+    document.getElementById('jobguard-manual-trigger')?.remove();
+  }
+
+  // ============================================
   // 設定面板（v2：顯示實際資料源 metadata）
   // ============================================
   function showSettingsPanel() {
@@ -555,6 +681,42 @@
       }
     };
     document.addEventListener('keydown', onKey);
+
+    // === 啟動模式 wiring ===
+    const settings = window.__jobguard_settings;
+    if (settings) {
+      settings.load().then(({ scanMode }) => {
+        const radio = shadow.querySelector(`input[name="jg-scan-mode"][value="${scanMode}"]`);
+        if (radio) radio.checked = true;
+        shadow.querySelectorAll('.scan-mode-option').forEach((opt) => {
+          opt.classList.toggle('active', opt.dataset.mode === scanMode);
+        });
+      });
+
+      shadow.querySelectorAll('input[name="jg-scan-mode"]').forEach((input) => {
+        input.addEventListener('change', async () => {
+          const mode = input.value;
+          await settings.save({ scanMode: mode });
+          shadow.querySelectorAll('.scan-mode-option').forEach((opt) => {
+            opt.classList.toggle('active', opt.dataset.mode === mode);
+          });
+          if (mode === 'auto') {
+            window.__jobguard_hideManualTrigger?.();
+          }
+        });
+      });
+    }
+
+    // 「⚡ 立刻分析此頁面」按鈕
+    shadow.querySelector('.run-now-btn')?.addEventListener('click', () => {
+      window.__jobguard_hideManualTrigger?.();
+      overlay.remove();
+      if (typeof window.__jobguard_runScan === 'function') {
+        window.__jobguard_runScan({ force: true });
+      } else {
+        console.warn('[JobGuard] runScan API 未就緒（可能不在求職網站頁面上）');
+      }
+    });
 
     // 非同步抓 metadata，拿到後 patch 到面板
     chrome.runtime.sendMessage({ type: 'getMeta' }, (meta) => {
@@ -595,6 +757,27 @@
           </div>
 
           <div class="section">
+            <h3>啟動模式</h3>
+            <div class="scan-mode-options">
+              <label class="scan-mode-option" data-mode="auto">
+                <input type="radio" name="jg-scan-mode" value="auto">
+                <div class="scan-mode-content">
+                  <div class="scan-mode-title">🚀 自動分析<span class="badge-recommended">推薦</span></div>
+                  <div class="scan-mode-desc">在 104、1111、Yourator、518、yes123、Cake 等台灣常用求職網站，開啟頁面時自動掃描公司風險</div>
+                </div>
+              </label>
+              <label class="scan-mode-option" data-mode="manual">
+                <input type="radio" name="jg-scan-mode" value="manual">
+                <div class="scan-mode-content">
+                  <div class="scan-mode-title">👆 手動分析</div>
+                  <div class="scan-mode-desc">不自動掃描。在求職網站右上角會顯示「點此分析」按鈕，由你決定何時開始</div>
+                </div>
+              </label>
+            </div>
+            <button class="run-now-btn" type="button">⚡ 立刻分析此頁面</button>
+          </div>
+
+          <div class="section">
             <h3>呈現偏好 <span class="badge-soon">即將推出</span></h3>
             <div class="option-row">
               <div>
@@ -609,6 +792,24 @@
                 <div class="option-desc">把高風險職缺整列染色，更醒目</div>
               </div>
               <span class="badge-soon">SOON</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>支援的求職網站</h3>
+            <div class="option-row active" style="flex-direction:column;align-items:stretch;gap:6px;">
+              <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                <span class="law-tag">🟢 104 人力銀行</span>
+                <span class="law-tag">🟢 1111 人力銀行</span>
+                <span class="law-tag">🟢 Yourator</span>
+                <span class="law-tag">🟢 518 熊班</span>
+                <span class="law-tag">🟢 yes123 求職網</span>
+                <span class="law-tag">🟢 Cake</span>
+              </div>
+              <div style="font-size:11px;color:#888;margin-top:4px;line-height:1.5;">
+                在這些網站的搜尋頁開啟時，求職門神會自動掃描職缺旁的公司。
+                未來會持續加入其他平台。
+              </div>
             </div>
           </div>
 
@@ -911,4 +1112,6 @@
   window.__jobguard_hideProgress = hideProgress;
   window.__jobguard_showProgressDone = showProgressDone;
   window.__jobguard_showSettingsPanel = showSettingsPanel;
+  window.__jobguard_showManualTrigger = showManualTrigger;
+  window.__jobguard_hideManualTrigger = hideManualTrigger;
 })();
