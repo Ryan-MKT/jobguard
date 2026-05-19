@@ -69,7 +69,7 @@
 
     // ⭐ 替換 loading 為實際徽章
     let injected = 0;
-    const stats = { red: 0, yellow: 0, low: 0, green: 0, none: 0 };
+    const stats = { red: 0, yellow: 0, green: 0 };
 
     for (let i = 0; i < uniqueNames.length; i++) {
       const name = uniqueNames[i];
@@ -82,21 +82,21 @@
           ...result,
         });
         injected++;
-        stats[result.risk.level]++;
+        if (stats[result.risk.level] !== undefined) stats[result.risk.level]++;
       }
     }
 
     console.log(
-      `%c🎨 注入 ${injected} 個徽章 | 🔴${stats.red} 🟡${stats.yellow} 🟠${stats.low} 🟢${stats.green} ✅${stats.none} | ${elapsed}ms`,
+      `%c🎨 注入 ${injected} 個徽章 | 🔴${stats.red} 🟡${stats.yellow} 🟢${stats.green} | ${elapsed}ms`,
       'color: #e69138; font-weight: bold;'
     );
 
     // ⭐ 完成提示（v3：圖示常駐，不自動消失，可點開設定）
-    const warning = stats.red + stats.yellow + stats.low;
+    const warning = stats.red + stats.yellow;
     const doneText =
       warning > 0
-        ? `${warning} 家有風險（${injected} 家完成）`
-        : `已分析 ${injected} 家公司`;
+        ? `${stats.red} 家有裁罰、${stats.yellow} 家有新聞（${injected} 家完成）`
+        : `已分析 ${injected} 家公司，皆無風險`;
     window.__jobguard_showProgressDone(doneText, { warn: warning > 0 });
   }
 

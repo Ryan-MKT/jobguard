@@ -117,7 +117,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return false;
     }
     findCompany(msg.name)
-      .then((match) => sendResponse({ match, risk: calculateRisk(match) }))
+      .then((match) => sendResponse({ match, risk: calculateRisk(match, null) }))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
@@ -138,8 +138,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const newsList = await fetchAllNews(validNames, 5);
         const results = matches.map((match, i) => ({
           match,
-          risk: calculateRisk(match),
           news: newsList[i],
+          risk: calculateRisk(match, newsList[i]),
         }));
         sendResponse(results);
       } catch (e) {

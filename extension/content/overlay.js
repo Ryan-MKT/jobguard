@@ -308,6 +308,21 @@
       letter-spacing:0.2px;
     }
     .violation-item-docno .docno-label { color:#a04848; font-weight:600; margin-right:4px; font-family:inherit; }
+    .docno-guide {
+      margin-top:12px;
+      padding:10px 13px;
+      background:#fff8ee;
+      border:1px solid #ffe0b2;
+      border-radius:8px;
+      font-size:11px;
+      color:#5a3a00;
+      line-height:1.7;
+    }
+    .docno-guide strong { color:#bf6a00; }
+    .docno-guide ol { margin:5px 0 0; padding-left:18px; }
+    .docno-guide li { margin-bottom:2px; }
+    .docno-guide a { color:#bf6a00; text-decoration:underline; }
+    .docno-guide a:hover { color:#a04848; }
     .violation-more { margin-top:8px; }
     .violation-more summary { cursor:pointer; padding:8px 12px; background:#fff; border:1px dashed #f3dada; border-radius:8px; font-size:11px; color:#888; user-select:none; text-align:center; list-style:none; }
     .violation-more summary::-webkit-details-marker { display:none; }
@@ -315,6 +330,52 @@
     .violation-more[open] summary { margin-bottom:8px; }
     .official-link { display:inline-block; margin-top:10px; padding-top:8px; border-top:1px dashed #fde0e0; font-size:11px; color:#888; text-decoration:none; }
     .official-link:hover { color:#555; text-decoration:underline; }
+    .news-section-head { display:flex; align-items:center; gap:8px; margin:8px 0; }
+    .news-section-head h3 { margin:0; font-size:13px; color:#888; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
+    .news-help-toggle {
+      background:transparent;
+      border:1.5px solid #bbb;
+      border-radius:50%;
+      width:18px; height:18px;
+      font-size:11px;
+      cursor:pointer;
+      color:#888;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:0; line-height:1;
+      font-family: inherit;
+      transition:all 0.15s ease;
+      flex-shrink:0;
+    }
+    .news-help-toggle:hover { background:#fff8ee; border-color:#e69138; color:#e69138; }
+    .news-help-toggle.active { background:#e69138; border-color:#e69138; color:#fff; }
+    .news-help-panel {
+      margin-bottom:12px;
+      padding:12px 14px;
+      background:#fff8ee;
+      border:1px solid #ffe0b2;
+      border-radius:10px;
+      font-size:11px;
+      color:#5a3a00;
+      line-height:1.7;
+    }
+    .news-help-panel .help-title { color:#bf6a00; font-weight:700; font-size:12px; margin-bottom:6px; }
+    .news-help-panel .kw-group { margin-top:8px; }
+    .news-help-panel .kw-group-label { font-weight:600; color:#a04848; margin-bottom:3px; }
+    .news-help-panel .kw-group-desc { color:#888; font-size:10px; margin-bottom:5px; }
+    .news-help-panel .kw-tag {
+      display:inline-block;
+      margin:2px 3px 2px 0;
+      padding:2px 8px;
+      background:#fff;
+      border:1px solid #ffe0b2;
+      border-radius:9px;
+      font-size:10px;
+      color:#5a3a00;
+    }
+    .news-help-panel .kw-tag.strong { border-color:#fdc080; background:#fff3e0; font-weight:600; }
+    .news-help-panel .help-footnote { color:#888; font-size:10px; margin-top:8px; padding-top:6px; border-top:1px dashed #ffe0b2; }
     .news-item { display:block; padding:12px 14px; margin-bottom:8px; border:1px solid #eee; border-radius:10px; color:#222; text-decoration:none; transition:all 0.15s; }
     .news-item:hover { border-color:#e69138; background:#fffbf5; transform:translateX(2px); }
     .news-title { font-size:13px; line-height:1.45; color:#1a1a1a; }
@@ -587,7 +648,7 @@
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
                 <div>
                   <div class="option-text">Google News 即時新聞</div>
-                  <div class="option-desc">最近 10 年公司勞資相關新聞（依日期倒序，含 59 個過濾關鍵字）</div>
+                  <div class="option-desc">最近 10 年公司勞資相關新聞（依日期倒序，強弱信號分級過濾，弱詞需搭配公司名）</div>
                 </div>
                 <span class="badge-on">已啟用</span>
               </div>
@@ -635,6 +696,20 @@
       if (e.target === backdrop) overlay.remove();
     });
     shadow.querySelector('.close').addEventListener('click', () => overlay.remove());
+
+    // 新聞過濾規則說明 toggle（如果這次有新聞 section）
+    const helpToggle = shadow.querySelector('.news-help-toggle');
+    const helpPanel = shadow.querySelector('.news-help-panel');
+    if (helpToggle && helpPanel) {
+      helpToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isOpen = !helpPanel.hidden;
+        helpPanel.hidden = isOpen;
+        helpToggle.classList.toggle('active', !isOpen);
+      });
+    }
+
     const onKey = (e) => {
       if (e.key === 'Escape') {
         overlay.remove();
@@ -653,7 +728,7 @@
             <div>
               <h2 class="title">${escapeHtml(risk.label)}</h2>
               <p class="company">${escapeHtml(company)}</p>
-              <p class="meta">風險分數 ${risk.score}/${risk.max}：${escapeHtml(risk.reasons.join('、'))}</p>
+              <p class="meta">${escapeHtml(risk.reasons.join('、'))}</p>
             </div>
             <button class="close" title="關閉">×</button>
           </div>
@@ -715,6 +790,14 @@
               ${hiddenHtml}
             </details>
           ` : ''}
+          <div class="docno-guide">
+            💡 <strong>想看完整裁罰原文？</strong>抄下上方「處分字號」可以：
+            <ol>
+              <li>撥 <strong>1955 勞工諮詢專線</strong>（免付費），報文號 + 公司名直接詢問</li>
+              <li>到「該縣市勞工局網站」的<strong>違反勞動法令公布專區</strong>，按處分日期月份找</li>
+              <li>依《<a href="https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=I0020026" target="_blank" rel="noopener noreferrer">政府資訊公開法</a>》向發文單位申請閱覽（線上或書面）</li>
+            </ol>
+          </div>
           <a class="official-link" href="https://announcement.mol.gov.tw/" target="_blank" rel="noopener noreferrer">
             → 到勞動部查詢系統驗證
           </a>
@@ -739,7 +822,40 @@
     if (news?.items?.length > 0) {
       // 範圍標籤：'10y' → '10 年內'，'5y' → '5 年內'，'1y' → '1 年內'
       const rangeLabel = (news.timeframe || '10y').replace(/^(\d+)y$/, '$1 年內');
-      html += `<div class="section"><h3>📰 相關新聞（${news.count} 則，${rangeLabel}，依日期倒序）</h3>`;
+
+      // 過濾規則說明面板（預設隱藏，點 ⓘ 展開）
+      const strongKws = ['罰款','罰鍰','開罰','裁罰','判賠','勒令','撤照','停業','欠薪','積欠','過勞','加班費','無薪假','減薪','苛扣','剝削','惡意倒閉','血汗','敗訴','提告','霸凌','性騷','騷擾','性侵','職災','工傷','職業病','罷工','靜坐','示威','黑心','慣老闆','奴工'];
+      const weakKws = ['違法','違規','違反','處分','賠償','糾正','勞資','勞權','工會','爭議','糾紛','申訴','檢舉','聲援','抗議','解雇','資遣','超時','訴訟','判決','起訴','和解','歧視','虐待','暴力','不當','勞健保'];
+
+      const helpPanelHtml = `
+        <div class="news-help-panel" hidden>
+          <div class="help-title">📰 哪些新聞會被抓取顯示？</div>
+          <div class="kw-group">
+            <div class="kw-group-label">🔥 強信號（${strongKws.length} 個）</div>
+            <div class="kw-group-desc">標題出現任一個，直接收錄</div>
+            ${strongKws.map(k => `<span class="kw-tag strong">${escapeHtml(k)}</span>`).join('')}
+          </div>
+          <div class="kw-group">
+            <div class="kw-group-label">💧 弱信號（${weakKws.length} 個）</div>
+            <div class="kw-group-desc">標題只含這類詞時，必須<strong>同時提到本公司名</strong>才收錄（避免泛談文章誤抓）</div>
+            ${weakKws.map(k => `<span class="kw-tag">${escapeHtml(k)}</span>`).join('')}
+          </div>
+          <div class="help-footnote">
+            ⏱ 時間範圍：${rangeLabel}（依日期倒序顯示前 5 則）<br>
+            📊 來源：Google News RSS
+          </div>
+        </div>
+      `;
+
+      html += `
+        <div class="section">
+          <div class="news-section-head">
+            <h3>📰 相關新聞（${news.count} 則，${rangeLabel}，依日期倒序）</h3>
+            <button type="button" class="news-help-toggle" aria-label="說明過濾規則" title="哪些新聞會被抓取？">ⓘ</button>
+          </div>
+          ${helpPanelHtml}
+      `;
+      // 注意：原本 section 用一個外層 div 收尾，這邊先省略 closing div，下方 news loop 後接 </div>
       for (const n of news.items) {
         const date = n.pubDate ? new Date(n.pubDate).toISOString().slice(0, 10) : '';
         // URL 防護：只允許 http(s) 連結，避免 javascript: 等 scheme
