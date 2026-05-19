@@ -17,8 +17,7 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 11
+        # 不設 version，自動讀 package.json 的 packageManager 欄位
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
