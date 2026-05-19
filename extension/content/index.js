@@ -1,8 +1,7 @@
 // ============================================
-// 求職門神 - Content Script 主入口（v1.3）
+// 求職門神 - Content Script 主入口（v1.4）
+// 加入 loading 狀態 + 全域進度
 // ============================================
-// v1.3 改動：polling 信號改用「公司連結數量」
-//            護理師/醫師等職缺多是診所，不一定有「有限公司」字眼
 
 (function () {
   console.log(
@@ -13,32 +12,29 @@
 
   if (!location.href.includes('/jobs/search/')) return;
 
+  // ⭐ 頁面一載入就立刻顯示啟動中圖示（不用等職缺渲染）
+  window.__jobguard_showProgress('🛡️ 求職門神 啟動中…');
+
   let attempts = 0;
   const MAX_ATTEMPTS = 30;
 
   const timer = setInterval(() => {
     attempts++;
-    // 改用「指向 /company/ 的連結數量」當信號（更可靠）
     const companyLinkCount = document.querySelectorAll('a[href*="/company/"]').length;
 
     if (companyLinkCount >= 10) {
       clearInterval(timer);
-      console.log(`[JobGuard] 偵測到 ${companyLinkCount} 個公司連結，開始處理`);
       setTimeout(() => {
         runMatcher();
         startObserver();
       }, 800);
     } else if (attempts >= MAX_ATTEMPTS) {
       clearInterval(timer);
-      console.warn(
-        `[JobGuard] 等了 ${MAX_ATTEMPTS / 2} 秒只看到 ${companyLinkCount} 個公司連結，跳過本次處理`
-      );
+      console.warn('⚠️ 等了太久沒看到足夠職缺');
+      window.__jobguard_showProgressDone('⚠️ 未偵測到職缺列表', { warn: true });
     }
   }, 500);
 
-  // ============================================
-  // 主流程
-  // ============================================
   async function runMatcher() {
     const allLinks = window.__jobguard_parse104();
     if (allLinks.length === 0) return;
@@ -48,7 +44,12 @@
     );
     if (unprocessed.length === 0) return;
 
-    // 按名分組（同一公司多個職缺只查 1 次）
+    // ⭐ 立刻注入 loading 徽章 + 顯示右上角進度
+    for (const link of unprocessed) {
+      window.__jobguard_injectLoadingBadge(link.element);
+    }
+
+    // 按公司名分組
     const byName = new Map();
     for (const link of unprocessed) {
       if (!byName.has(link.name)) byName.set(link.name, []);
@@ -56,13 +57,17 @@
     }
     const uniqueNames = [...byName.keys()];
 
+    window.__jobguard_showProgress(`🛡️ 分析 ${uniqueNames.length} 家公司中...`);
     console.log(
       `%c📋 ${unprocessed.length} 個職缺位置 (${uniqueNames.length} 家獨立公司)，查詢中...`,
       'color: #e69138; font-weight: bold;'
     );
 
+    const t0 = Date.now();
     const results = await sendToSW({ type: 'findCompanies', names: uniqueNames });
+    const elapsed = Date.now() - t0;
 
+    // ⭐ 替換 loading 為實際徽章
     let injected = 0;
     const stats = { red: 0, yellow: 0, low: 0, green: 0, none: 0 };
 
@@ -72,7 +77,7 @@
       const occurrences = byName.get(name);
 
       for (const occ of occurrences) {
-        window.__jobguard_injectBadge(occ.element, {
+        window.__jobguard_replaceBadge(occ.element, {
           company: name,
           ...result,
         });
@@ -82,14 +87,19 @@
     }
 
     console.log(
-      `%c🎨 注入 ${injected} 個徽章 | 🔴${stats.red} 🟡${stats.yellow} 🟠${stats.low} 🟢${stats.green} ✅${stats.none}`,
+      `%c🎨 注入 ${injected} 個徽章 | 🔴${stats.red} 🟡${stats.yellow} 🟠${stats.low} 🟢${stats.green} ✅${stats.none} | ${elapsed}ms`,
       'color: #e69138; font-weight: bold;'
     );
+
+    // ⭐ 完成提示（v3：圖示常駐，不自動消失，可點開設定）
+    const warning = stats.red + stats.yellow + stats.low;
+    const doneText =
+      warning > 0
+        ? `${warning} 家有風險（${injected} 家完成）`
+        : `已分析 ${injected} 家公司`;
+    window.__jobguard_showProgressDone(doneText, { warn: warning > 0 });
   }
 
-  // ============================================
-  // 監聽頁面變化
-  // ============================================
   let observerTimer = null;
   function startObserver() {
     const observer = new MutationObserver(() => {

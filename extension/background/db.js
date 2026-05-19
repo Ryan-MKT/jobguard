@@ -1,5 +1,5 @@
 // ============================================
-// IndexedDB 操作工具
+// IndexedDB 操作工具 v2.0 - 含配額容錯
 // ============================================
 const DB_NAME = 'jobguard-db';
 const DB_VERSION = 1;
@@ -23,7 +23,30 @@ function openDB() {
   });
 }
 
+/**
+ * 寫入全部公司資料
+ * 含配額容錯：超過時 prune 一半再試
+ */
 export async function replaceAllCompanies(index) {
+  try {
+    return await doReplaceAll(index);
+  } catch (err) {
+    // 配額不足，砍一半重試
+    if (err.name === 'QuotaExceededError' || /quota/i.test(err.message || '')) {
+      console.warn('[JobGuard DB] ⚠️ IndexedDB 配額不足，砍一半舊資料後重試');
+      try {
+        await pruneStore(STORE_COMPANIES, 0.5);
+        return await doReplaceAll(index);
+      } catch (err2) {
+        console.error('[JobGuard DB] ❌ 砍完還是寫不進去:', err2.message);
+        throw err2;
+      }
+    }
+    throw err;
+  }
+}
+
+async function doReplaceAll(index) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_COMPANIES, 'readwrite');
@@ -36,10 +59,45 @@ export async function replaceAllCompanies(index) {
     }
     tx.oncomplete = () => resolve(count);
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('交易被中止'));
+  });
+}
+
+/**
+ * 砍掉一定比例的舊資料（緊急情況用）
+ * @param {string} storeName
+ * @param {number} ratio 0.5 = 砍一半
+ */
+async function pruneStore(storeName, ratio) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+
+    const countReq = store.count();
+    countReq.onsuccess = () => {
+      const total = countReq.result;
+      const toDelete = Math.floor(total * ratio);
+      let deleted = 0;
+      const cursorReq = store.openCursor();
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && deleted < toDelete) {
+          cursor.delete();
+          deleted++;
+          cursor.continue();
+        } else {
+          resolve(deleted);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    };
+    countReq.onerror = () => reject(countReq.error);
   });
 }
 
 export async function getCompany(normalizedName) {
+  if (!normalizedName || typeof normalizedName !== 'string') return null;
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_COMPANIES, 'readonly');
@@ -49,9 +107,6 @@ export async function getCompany(normalizedName) {
   });
 }
 
-/**
- * 列出所有公司 key（用於模糊比對時掃描）
- */
 export async function getAllCompanyKeys() {
   const db = await openDB();
   return new Promise((resolve, reject) => {

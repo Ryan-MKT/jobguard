@@ -3,8 +3,8 @@
 // ============================================
 //
 // 策略：在 query 裡加入負面關鍵字，讓 Google 幫我們先篩過
-// 例如：搜尋「"鴻海" (違法 OR 勞資 OR 訴訟 OR 罷工)」
-// 這樣回來的結果幾乎都是負面新聞
+
+import { fetchWithTimeout } from './fetch-utils.js';
 
 const NEGATIVE_KEYWORDS = [
   '違法', '違規', '罰款', '裁罰', '判賠',
@@ -22,7 +22,7 @@ const CACHE_TTL = 60 * 60 * 1000; // 1 小時
  * @param {string} companyName
  * @param {string} timeframe '7d' | '1m' | '6m' | '1y'
  */
-export async function fetchCompanyNews(companyName, timeframe = '6m') {
+export async function fetchCompanyNews(companyName, timeframe = '1y') {
   if (!companyName) return null;
 
   // 檢查快取
@@ -42,7 +42,8 @@ export async function fetchCompanyNews(companyName, timeframe = '6m') {
     `&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
 
   try {
-    const response = await fetch(url);
+    // 8 秒 timeout（單一公司不該等太久）
+    const response = await fetchWithTimeout(url, {}, 8000);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const xml = await response.text();

@@ -49,12 +49,18 @@ async function main() {
   const byCity = {};
   const byLawType = {};
   let skipped = 0;
+  let earliestDate = '';
+  let latestDate = '';
 
   for (const rec of raw) {
     const normalized = normalizeName(rec.name);
     if (!normalized || normalized.length < 2) {
       skipped++;
       continue;
+    }
+    if (rec.date) {
+      if (!earliestDate || rec.date < earliestDate) earliestDate = rec.date;
+      if (rec.date > latestDate) latestDate = rec.date;
     }
 
     if (!byCompany.has(normalized)) {
@@ -118,6 +124,7 @@ async function main() {
     coveredLaws: Object.keys(byLawType).length,
     totalRecords: raw.length,
     uniqueCompanies: byCompany.size,
+    dateRange: { earliest: earliestDate, latest: latestDate },
     byCity,
     byLawType,
     index,
