@@ -76,9 +76,78 @@ function isLaborRelated(title, companyName) {
   return title.includes(core);
 }
 
-// 記憶體快取（service worker 重啟會清空，但夠用）
-const cache = new Map(); // companyName → { fetchedAt, result }
-const CACHE_TTL = 60 * 60 * 1000; // 1 小時
+// ============================================
+// 持久化新聞快取（chrome.storage.local）
+// ============================================
+// - 24 小時 TTL，跨網站／跨分頁／跨 service worker 重啟都共用
+// - 記憶體鏡像 + 寫入 throttle 500ms：兼顧速度與持久性
+// - 載入時自動 prune 過期項目，避免無上限成長
+
+const CACHE_STORAGE_KEY = 'jobguard.news.cache';
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 小時
+
+let _memCache = null;
+const _pendingWrites = new Map();
+let _flushTimer = null;
+
+async function loadCache() {
+  if (_memCache) return _memCache;
+  return new Promise((resolve) => {
+    chrome.storage.local.get(CACHE_STORAGE_KEY, (res) => {
+      const raw = res?.[CACHE_STORAGE_KEY] || {};
+      const now = Date.now();
+      const pruned = {};
+      let prunedCount = 0;
+      for (const [name, entry] of Object.entries(raw)) {
+        if (entry?.fetchedAt && now - entry.fetchedAt < CACHE_TTL) {
+          pruned[name] = entry;
+        } else {
+          prunedCount++;
+        }
+      }
+      _memCache = pruned;
+      if (prunedCount > 0) {
+        chrome.storage.local.set({ [CACHE_STORAGE_KEY]: pruned });
+        console.log(`[News cache] 載入時 prune ${prunedCount} 筆過期`);
+      }
+      resolve(_memCache);
+    });
+  });
+}
+
+function getCached(companyName) {
+  if (!_memCache) return null;
+  const entry = _memCache[companyName];
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt >= CACHE_TTL) return null;
+  return entry.result;
+}
+
+function setCached(companyName, result) {
+  const entry = { fetchedAt: Date.now(), result };
+  if (_memCache) _memCache[companyName] = entry;
+  _pendingWrites.set(companyName, entry);
+  if (!_flushTimer) {
+    _flushTimer = setTimeout(flushPendingWrites, 500);
+  }
+}
+
+async function flushPendingWrites() {
+  _flushTimer = null;
+  if (_pendingWrites.size === 0) return;
+  // 重新讀一次 storage 避免覆蓋掉其他寫入
+  const raw = await new Promise((resolve) => {
+    chrome.storage.local.get(CACHE_STORAGE_KEY, (res) =>
+      resolve(res?.[CACHE_STORAGE_KEY] || {})
+    );
+  });
+  for (const [name, entry] of _pendingWrites) {
+    raw[name] = entry;
+  }
+  _pendingWrites.clear();
+  _memCache = raw;
+  chrome.storage.local.set({ [CACHE_STORAGE_KEY]: raw });
+}
 
 /**
  * 抓某公司的最近負面新聞
@@ -88,11 +157,9 @@ const CACHE_TTL = 60 * 60 * 1000; // 1 小時
 export async function fetchCompanyNews(companyName, timeframe = '10y') {
   if (!companyName) return null;
 
-  // 檢查快取
-  const cached = cache.get(companyName);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-    return cached.result;
-  }
+  await loadCache();
+  const cached = getCached(companyName);
+  if (cached) return cached;
 
   // 組裝 query：「公司名」 + 任一負面關鍵字
   const negativeQuery = NEGATIVE_KEYWORDS.slice(0, 12).join(' OR ');
@@ -143,7 +210,7 @@ export async function fetchCompanyNews(companyName, timeframe = '10y') {
       rawCount: allItems.length, // Google 回的總數，過濾前
     };
 
-    cache.set(companyName, { fetchedAt: Date.now(), result });
+    setCached(companyName, result);
     return result;
   } catch (err) {
     console.warn(`[News] ${companyName} 抓取失敗:`, err.message);
@@ -156,7 +223,7 @@ export async function fetchCompanyNews(companyName, timeframe = '10y') {
  * @param {string[]} names
  * @param {number} concurrency 同時最多幾個請求
  */
-export async function fetchAllNews(names, concurrency = 5) {
+export async function fetchAllNews(names, concurrency = 10) {
   const results = new Array(names.length);
   let index = 0;
 

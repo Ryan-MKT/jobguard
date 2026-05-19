@@ -153,7 +153,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         const userSettings = await getUserSettings();
         const matches = await findCompanies(validNames, userSettings);
-        const newsList = await fetchAllNews(validNames, 5);
+        const newsList = await fetchAllNews(validNames, 10);
         const results = matches.map((match, i) => ({
           match,
           news: newsList[i],

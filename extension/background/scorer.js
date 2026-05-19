@@ -21,9 +21,7 @@ export function calculateRisk(match, news) {
   if (hasViolation) {
     const reasons = [];
     reasons.push(`政府裁罰 ${match.count} 次`);
-    if (match.totalFine > 0) {
-      reasons.push(`累計罰款 NT$ ${match.totalFine.toLocaleString()}`);
-    }
+    // 罰款金額刻意隱藏：露出可能造成誤解 / 名譽爭議，使用者要查實際金額可走 docno 申請
     if (match.confidence < 0.8) {
       reasons.push(`模糊比對 ${(match.confidence * 100).toFixed(0)}% 信心`);
     }

@@ -959,6 +959,24 @@
       }
     };
     document.addEventListener('keydown', onKey);
+
+    // 非同步抓 meta，填入 footer 的「資料涵蓋期間」與「上次同步」
+    chrome.runtime.sendMessage({ type: 'getMeta' }, (meta) => {
+      if (chrome.runtime.lastError || !meta || meta.error) return;
+      const covEl = shadow.querySelector('[data-modal-coverage]');
+      const syncEl = shadow.querySelector('[data-modal-sync]');
+      if (covEl && meta.dateRange?.earliest && meta.dateRange?.latest) {
+        const fmt = (d) => {
+          if (!d || d.length < 7) return d;
+          const m = d.slice(0, 7).match(/^(\d{4})-(\d{2})$/);
+          return m ? `${m[1]}年${parseInt(m[2], 10)}月` : d;
+        };
+        covEl.textContent = `政府裁罰資料涵蓋期間：${fmt(meta.dateRange.earliest)} ~ ${fmt(meta.dateRange.latest)}`;
+      }
+      if (syncEl && meta.lastSyncAt) {
+        syncEl.textContent = `上次同步：${meta.lastSyncAt.slice(0, 10)}`;
+      }
+    });
   }
 
   function renderModalHTML(result) {
@@ -1000,9 +1018,10 @@
         // 多項違規用全形分號分隔比較好讀
         const content = escapeHtml(v.content || '（無詳細描述）').replace(/;/g, '；');
         const amount = Number(v.amount) || 0;
+        // 不顯示具體金額（避免名譽爭議 / 誤解）；想知道金額可走處分字號申請
         const fineHtml = amount > 0
-          ? `<div class="violation-item-fine has-amount">罰款 NT$ ${amount.toLocaleString()}</div>`
-          : `<div class="violation-item-fine">限期改善（罰款 0 元）</div>`;
+          ? `<div class="violation-item-fine has-amount">已開罰</div>`
+          : `<div class="violation-item-fine">限期改善</div>`;
         const docnoHtml = v.docno
           ? `<div class="violation-item-docno"><span class="docno-label">處分字號</span>${escapeHtml(v.docno)}</div>`
           : '';
@@ -1051,7 +1070,6 @@
           <h3>⚖️ 政府裁罰紀錄</h3>
           <div class="violation-box">
             <div class="violation-count">${match.count} 次違規</div>
-            <div class="violation-detail">累計罰款 NT$ ${match.totalFine.toLocaleString()}</div>
             <div class="violation-meta">最近違規日：${escapeHtml(match.latestDate)}</div>
             ${lawChips ? `<div class="law-chips">${lawChips}</div>` : ''}
             <div class="violation-meta">比對「${escapeHtml(match.matchedKey)}」(${match.matchType}, 信心 ${(match.confidence * 100).toFixed(0)}%)</div>
@@ -1111,11 +1129,19 @@
       html += `</div>`;
     }
 
+    // Google News：今天往前 10 年
+    const _now = new Date();
+    const _tenAgo = new Date(_now.getFullYear() - 10, _now.getMonth(), 1);
+    const _fmtYM = (d) => `${d.getFullYear()}年${d.getMonth() + 1}月`;
+    const newsRange = `${_fmtYM(_tenAgo)} ~ ${_fmtYM(_now)}`;
+
     html += `
           <div class="footer">
             <p>
               資料來源：勞動部違反勞動法令事業單位查詢系統（全國彙整） + Google News<br>
-              資料更新可能有時間差，請以官方公告為準。
+              <span data-modal-coverage>政府裁罰資料涵蓋期間：載入中…</span><br>
+              Google News 涵蓋期間：${newsRange}<br>
+              <span data-modal-sync>上次同步：—</span>。資料更新可能有時間差，請以官方公告為準。
             </p>
           </div>
         </div>
