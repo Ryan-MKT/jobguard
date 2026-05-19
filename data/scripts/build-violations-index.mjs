@@ -91,6 +91,7 @@ async function main() {
       law: rec.law,
       content: rec.lawcontent,
       amount: parseInt(rec.amt_dollartwd, 10) || 0,
+      docno: (rec.docno || '').trim(),
     });
 
     // 統計

@@ -290,6 +290,31 @@
     .violation-meta { margin-top:6px; font-size:11px; color:#888; }
     .law-chips { margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; }
     .law-chip { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; background:#fff; border:1px solid #f0d0d0; border-radius:11px; font-size:11px; color:#555; font-weight:500; }
+    .violation-list { margin-top:14px; padding-top:12px; border-top:1px dashed #fde0e0; }
+    .violation-list h4 { margin:0 0 8px; font-size:11px; color:#a04848; font-weight:700; letter-spacing:0.3px; }
+    .violation-item { background:#fff; border:1px solid #f3dada; border-radius:8px; padding:9px 12px; margin-bottom:6px; font-size:12px; line-height:1.55; }
+    .violation-item-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px; font-size:11px; }
+    .violation-item-head .vdate { font-weight:600; color:#666; }
+    .violation-item-head .vlaw { background:#fde0e0; color:#a04848; padding:1px 8px; border-radius:8px; font-weight:600; font-size:10px; flex-shrink:0; }
+    .violation-item-content { color:#333; word-break:break-word; }
+    .violation-item-fine { margin-top:5px; font-size:11px; color:#888; }
+    .violation-item-fine.has-amount { color:#d32f2f; font-weight:600; }
+    .violation-item-docno {
+      margin-top:5px; padding-top:5px;
+      border-top:1px dashed #f3dada;
+      font-size:10px; color:#999;
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      word-break: break-all;
+      letter-spacing:0.2px;
+    }
+    .violation-item-docno .docno-label { color:#a04848; font-weight:600; margin-right:4px; font-family:inherit; }
+    .violation-more { margin-top:8px; }
+    .violation-more summary { cursor:pointer; padding:8px 12px; background:#fff; border:1px dashed #f3dada; border-radius:8px; font-size:11px; color:#888; user-select:none; text-align:center; list-style:none; }
+    .violation-more summary::-webkit-details-marker { display:none; }
+    .violation-more summary:hover { background:#fff5f5; border-color:#e6c8c8; color:#666; }
+    .violation-more[open] summary { margin-bottom:8px; }
+    .official-link { display:inline-block; margin-top:10px; padding-top:8px; border-top:1px dashed #fde0e0; font-size:11px; color:#888; text-decoration:none; }
+    .official-link:hover { color:#555; text-decoration:underline; }
     .news-item { display:block; padding:12px 14px; margin-bottom:8px; border:1px solid #eee; border-radius:10px; color:#222; text-decoration:none; transition:all 0.15s; }
     .news-item:hover { border-color:#e69138; background:#fffbf5; transform:translateX(2px); }
     .news-title { font-size:13px; line-height:1.45; color:#1a1a1a; }
@@ -562,7 +587,7 @@
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
                 <div>
                   <div class="option-text">Google News 即時新聞</div>
-                  <div class="option-desc">最近 1 年公司負面新聞（含勞資糾紛、性騷、罷工等 18 種關鍵字）</div>
+                  <div class="option-desc">最近 10 年公司勞資相關新聞（依日期倒序，含 59 個過濾關鍵字）</div>
                 </div>
                 <span class="badge-on">已啟用</span>
               </div>
@@ -635,13 +660,66 @@
     `;
 
     if (match) {
+      const lawIcons = {
+        '勞動基準法':'⚖️','性別平等工作法':'⚧️','職業安全衛生法':'🛠️',
+        '勞工退休金條例':'💰','最低工資法':'💵','就業服務法':'📋',
+        '中高齡者及高齡者就業促進法':'👴','勞工職業災害保險及保護法':'🩹',
+        '其他':'📋',
+      };
       let lawChips = '';
       if (match.byLawType) {
-        const icons = { '勞動基準法':'⚖️','性別平等工作法':'⚧️','職業安全衛生法':'🛠️','勞工退休金條例':'💰','最低工資法':'💵','就業服務法':'📋' };
         for (const [law, count] of Object.entries(match.byLawType)) {
-          lawChips += `<span class="law-chip">${icons[law]||'📋'} ${escapeHtml(law)} ${count}</span>`;
+          lawChips += `<span class="law-chip">${lawIcons[law]||'📋'} ${escapeHtml(law)} ${count}</span>`;
         }
       }
+
+      // 違規明細列表（資料已依日期倒序）
+      const violations = Array.isArray(match.violations) ? match.violations : [];
+      const VISIBLE = 5;
+      const renderItem = (v) => {
+        const date = escapeHtml(v.date || '—');
+        const city = escapeHtml(v.city || '—');
+        const lawType = escapeHtml(v.lawType || '—');
+        // 多項違規用全形分號分隔比較好讀
+        const content = escapeHtml(v.content || '（無詳細描述）').replace(/;/g, '；');
+        const amount = Number(v.amount) || 0;
+        const fineHtml = amount > 0
+          ? `<div class="violation-item-fine has-amount">罰款 NT$ ${amount.toLocaleString()}</div>`
+          : `<div class="violation-item-fine">限期改善（罰款 0 元）</div>`;
+        const docnoHtml = v.docno
+          ? `<div class="violation-item-docno"><span class="docno-label">處分字號</span>${escapeHtml(v.docno)}</div>`
+          : '';
+        return `
+          <div class="violation-item">
+            <div class="violation-item-head">
+              <span class="vdate">${date} · ${city}</span>
+              <span class="vlaw">${lawType}</span>
+            </div>
+            <div class="violation-item-content">${content}</div>
+            ${fineHtml}
+            ${docnoHtml}
+          </div>
+        `;
+      };
+      const visibleHtml = violations.slice(0, VISIBLE).map(renderItem).join('');
+      const hiddenHtml = violations.slice(VISIBLE).map(renderItem).join('');
+      const restCount = Math.max(0, violations.length - VISIBLE);
+
+      const listHtml = violations.length === 0 ? '' : `
+        <div class="violation-list">
+          <h4>📋 違規明細（最近 ${Math.min(VISIBLE, violations.length)} 筆，依日期倒序）</h4>
+          ${visibleHtml}
+          ${restCount > 0 ? `
+            <details class="violation-more">
+              <summary>展開其餘 ${restCount} 筆 ▾</summary>
+              ${hiddenHtml}
+            </details>
+          ` : ''}
+          <a class="official-link" href="https://announcement.mol.gov.tw/" target="_blank" rel="noopener noreferrer">
+            → 到勞動部查詢系統驗證
+          </a>
+        </div>
+      `;
 
       html += `
         <div class="section">
@@ -652,13 +730,16 @@
             <div class="violation-meta">最近違規日：${escapeHtml(match.latestDate)}</div>
             ${lawChips ? `<div class="law-chips">${lawChips}</div>` : ''}
             <div class="violation-meta">比對「${escapeHtml(match.matchedKey)}」(${match.matchType}, 信心 ${(match.confidence * 100).toFixed(0)}%)</div>
+            ${listHtml}
           </div>
         </div>
       `;
     }
 
     if (news?.items?.length > 0) {
-      html += `<div class="section"><h3>📰 最近 1 年相關新聞（${news.count} 則）</h3>`;
+      // 範圍標籤：'10y' → '10 年內'，'5y' → '5 年內'，'1y' → '1 年內'
+      const rangeLabel = (news.timeframe || '10y').replace(/^(\d+)y$/, '$1 年內');
+      html += `<div class="section"><h3>📰 相關新聞（${news.count} 則，${rangeLabel}，依日期倒序）</h3>`;
       for (const n of news.items) {
         const date = n.pubDate ? new Date(n.pubDate).toISOString().slice(0, 10) : '';
         // URL 防護：只允許 http(s) 連結，避免 javascript: 等 scheme
