@@ -5,7 +5,8 @@
 (function () {
   const KEY = 'jobguard.settings';
   const DEFAULTS = Object.freeze({
-    scanMode: 'auto', // 'auto' | 'manual'
+    scanMode: 'auto',    // 'auto' | 'manual'
+    matchMode: 'strict', // 'strict' | 'loose' — 嚴格優先，避免誤標無辜公司
   });
 
   function load() {

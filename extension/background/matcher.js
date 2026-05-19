@@ -3,15 +3,21 @@
 // ============================================
 //
 // 三層策略（由準到鬆）：
-//   策略 1：精確比對        confidence 1.0  例：「統一速達股份有限公司」normalize 後 = 「統一速達」找到
-//   策略 2：反向包含        confidence 0.7  例：104 顯示「全聯」，IndexedDB「全聯實業」包含「全聯」
-//   策略 3：正向包含        confidence 0.6  例：104「郭淑玲(即鼎天餐飲店)」包含 IndexedDB「鼎天餐飲店」
+//   策略 1：精確比對        confidence 1.0
+//     例：「統一速達股份有限公司」normalize 後 = 「統一速達」找到
+//   策略 2：反向包含        confidence 0.7
+//     例：104 顯示「全聯」，IndexedDB「全聯實業」包含「全聯」
+//   策略 3：正向包含        confidence 0.6（容易誤判，僅 loose 模式啟用）
+//     例：104「上策行銷」包含 IndexedDB「上策」(2字 key 風險高)
+//
+// 模式：
+//   strict（預設）— 精確優先，避免誤標無辜公司
+//     ✘ 策略 3 完全停用
+//     策略 2 要求：搜尋名 ≥ 3 字 且 DB key 比搜尋名長 ≥ 2 字
+//   loose — 寬鬆比對，三層都跑（涵蓋多但有誤判風險）
 
 import { getCompany, getAllCompanyKeys } from './db.js';
 
-// ============================================
-// 正規化：跟 data/scripts/build-violations-index.mjs 用同一套邏輯
-// ============================================
 export function normalizeName(rawName) {
   if (!rawName || typeof rawName !== 'string') return null;
   let n = rawName.trim();
@@ -28,10 +34,9 @@ export function normalizeName(rawName) {
   return n.trim();
 }
 
-// 快取所有 key（避免每次都掃描 IndexedDB）
 let _keysCache = null;
 let _keysCacheTime = 0;
-const CACHE_TTL = 60 * 1000; // 1 分鐘
+const CACHE_TTL = 60 * 1000;
 
 async function getKeysCached() {
   const now = Date.now();
@@ -43,24 +48,18 @@ async function getKeysCached() {
 
 /**
  * 比對單一公司
- * @param {string} searchName 104 上抓到的公司名
+ * @param {string} searchName 求職網上抓到的公司名
+ * @param {object} [options]
+ * @param {'strict'|'loose'} [options.matchMode='strict']
  * @returns {Promise<MatchResult | null>}
- *
- * MatchResult = {
- *   ...violation data,
- *   matchType: 'exact' | 'reverse-contains' | 'forward-contains',
- *   confidence: 0.6 ~ 1.0,
- *   matchedKey: string,
- *   searchName: string
- * }
  */
-export async function findCompany(searchName) {
+export async function findCompany(searchName, options = {}) {
+  const matchMode = options.matchMode === 'loose' ? 'loose' : 'strict';
+
   const normalized = normalizeName(searchName);
   if (!normalized || normalized.length < 2) return null;
 
-  // ─────────────────────────────
-  // 策略 1：精確比對 (O(1) hash lookup)
-  // ─────────────────────────────
+  // 策略 1：精確比對（兩個模式都跑）
   const exact = await getCompany(normalized);
   if (exact) {
     return {
@@ -69,17 +68,22 @@ export async function findCompany(searchName) {
       confidence: 1.0,
       matchedKey: normalized,
       searchName,
+      matchMode,
     };
   }
 
-  // ─────────────────────────────
-  // 策略 2：反向包含（IndexedDB key 包含搜尋名）
-  // 例：104「全聯」、key「全聯實業」
-  // ─────────────────────────────
+  // 策略 2：反向包含
+  // strict 模式：搜尋名 ≥ 3 字 且 DB key 比搜尋名長 ≥ 2 字
   const allKeys = await getKeysCached();
-  const reverseMatches = allKeys.filter((k) => k.includes(normalized));
+  if (matchMode === 'strict' && normalized.length < 3) {
+    return null;
+  }
+
+  let reverseMatches = allKeys.filter((k) => k.includes(normalized));
+  if (matchMode === 'strict') {
+    reverseMatches = reverseMatches.filter((k) => k.length >= normalized.length + 2);
+  }
   if (reverseMatches.length > 0) {
-    // 多個候選時，取最短的（最像）
     reverseMatches.sort((a, b) => a.length - b.length);
     const best = await getCompany(reverseMatches[0]);
     return {
@@ -88,39 +92,38 @@ export async function findCompany(searchName) {
       confidence: 0.7,
       matchedKey: reverseMatches[0],
       searchName,
+      matchMode,
     };
   }
 
-  // ─────────────────────────────
-  // 策略 3：正向包含（搜尋名包含 IndexedDB key）
-  // 例：搜尋「全聯實業股份有限公司」、key「全聯實業」
-  // (通常 normalize 階段就處理掉了，這是保險)
-  // ─────────────────────────────
-  const forwardMatches = allKeys.filter(
-    (k) => k.length >= 2 && normalized.includes(k)
-  );
-  if (forwardMatches.length > 0) {
-    // 取最長的 key（最有識別性）
-    forwardMatches.sort((a, b) => b.length - a.length);
-    const best = await getCompany(forwardMatches[0]);
-    return {
-      ...best,
-      matchType: 'forward-contains',
-      confidence: 0.6,
-      matchedKey: forwardMatches[0],
-      searchName,
-    };
+  // 策略 3：正向包含（誤判風險高，僅 loose 模式啟用）
+  if (matchMode === 'loose') {
+    const forwardMatches = allKeys.filter(
+      (k) => k.length >= 2 && normalized.includes(k)
+    );
+    if (forwardMatches.length > 0) {
+      forwardMatches.sort((a, b) => b.length - a.length);
+      const best = await getCompany(forwardMatches[0]);
+      return {
+        ...best,
+        matchType: 'forward-contains',
+        confidence: 0.6,
+        matchedKey: forwardMatches[0],
+        searchName,
+        matchMode,
+      };
+    }
   }
 
-  // 三層都沒找到
   return null;
 }
 
 /**
- * 批次比對多家公司（效能優化版）
+ * 批次比對多家公司
  * @param {string[]} names
+ * @param {object} [options]
  * @returns {Promise<Array<MatchResult | null>>}
  */
-export async function findCompanies(names) {
-  return Promise.all(names.map((n) => findCompany(n)));
+export async function findCompanies(names, options) {
+  return Promise.all(names.map((n) => findCompany(n, options)));
 }

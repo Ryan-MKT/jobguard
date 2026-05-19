@@ -682,14 +682,22 @@
     };
     document.addEventListener('keydown', onKey);
 
-    // === 啟動模式 wiring ===
+    // === 啟動模式 + 比對嚴格度 wiring ===
     const settings = window.__jobguard_settings;
     if (settings) {
-      settings.load().then(({ scanMode }) => {
-        const radio = shadow.querySelector(`input[name="jg-scan-mode"][value="${scanMode}"]`);
-        if (radio) radio.checked = true;
-        shadow.querySelectorAll('.scan-mode-option').forEach((opt) => {
+      settings.load().then(({ scanMode, matchMode }) => {
+        // 啟動模式
+        const scanRadio = shadow.querySelector(`input[name="jg-scan-mode"][value="${scanMode}"]`);
+        if (scanRadio) scanRadio.checked = true;
+        shadow.querySelectorAll('.scan-mode-option[data-mode]').forEach((opt) => {
           opt.classList.toggle('active', opt.dataset.mode === scanMode);
+        });
+
+        // 比對嚴格度
+        const matchRadio = shadow.querySelector(`input[name="jg-match-mode"][value="${matchMode}"]`);
+        if (matchRadio) matchRadio.checked = true;
+        shadow.querySelectorAll('.scan-mode-option[data-match-mode]').forEach((opt) => {
+          opt.classList.toggle('active', opt.dataset.matchMode === matchMode);
         });
       });
 
@@ -697,12 +705,22 @@
         input.addEventListener('change', async () => {
           const mode = input.value;
           await settings.save({ scanMode: mode });
-          shadow.querySelectorAll('.scan-mode-option').forEach((opt) => {
+          shadow.querySelectorAll('.scan-mode-option[data-mode]').forEach((opt) => {
             opt.classList.toggle('active', opt.dataset.mode === mode);
           });
           if (mode === 'auto') {
             window.__jobguard_hideManualTrigger?.();
           }
+        });
+      });
+
+      shadow.querySelectorAll('input[name="jg-match-mode"]').forEach((input) => {
+        input.addEventListener('change', async () => {
+          const mode = input.value;
+          await settings.save({ matchMode: mode });
+          shadow.querySelectorAll('.scan-mode-option[data-match-mode]').forEach((opt) => {
+            opt.classList.toggle('active', opt.dataset.matchMode === mode);
+          });
         });
       });
     }
@@ -775,6 +793,29 @@
               </label>
             </div>
             <button class="run-now-btn" type="button">⚡ 立刻分析此頁面</button>
+          </div>
+
+          <div class="section">
+            <h3>比對嚴格度</h3>
+            <div class="scan-mode-options">
+              <label class="scan-mode-option" data-match-mode="strict">
+                <input type="radio" name="jg-match-mode" value="strict">
+                <div class="scan-mode-content">
+                  <div class="scan-mode-title">🔒 嚴格比對<span class="badge-recommended">推薦</span></div>
+                  <div class="scan-mode-desc">只標示高信心比對的公司，避免誤標無辜公司。少數真實風險可能漏掉，但不會冤枉好人</div>
+                </div>
+              </label>
+              <label class="scan-mode-option" data-match-mode="loose">
+                <input type="radio" name="jg-match-mode" value="loose">
+                <div class="scan-mode-content">
+                  <div class="scan-mode-title">🔓 寬鬆比對</div>
+                  <div class="scan-mode-desc">接受較模糊的比對（含短字串部分匹配），涵蓋更多公司但有誤標風險。請參考詳情頁的「信心度」自行判斷</div>
+                </div>
+              </label>
+            </div>
+            <div style="font-size:11px;color:#888;margin-top:8px;line-height:1.55;">
+              💡 切換後請重新整理職缺頁面以套用新規則。
+            </div>
           </div>
 
           <div class="section">

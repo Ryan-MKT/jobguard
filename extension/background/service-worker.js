@@ -8,6 +8,18 @@ import { calculateRisk } from './scorer.js';
 import { fetchAllNews } from './news.js';
 import { fetchWithRetry } from './fetch-utils.js';
 
+// 讀使用者設定（match mode 等）
+async function getUserSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get('jobguard.settings', (res) => {
+      const stored = res?.['jobguard.settings'] || {};
+      resolve({
+        matchMode: stored.matchMode === 'loose' ? 'loose' : 'strict',
+      });
+    });
+  });
+}
+
 const DATA_URL = 'https://ryan-mkt.github.io/jobguard/data/violations.json';
 const ALARM_NAME = 'sync-violations';
 const SYNC_INTERVAL_MINUTES = 60 * 24 * 7;
@@ -116,9 +128,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ error: 'invalid name' });
       return false;
     }
-    findCompany(msg.name)
-      .then((match) => sendResponse({ match, risk: calculateRisk(match, null) }))
-      .catch((e) => sendResponse({ error: e.message }));
+    (async () => {
+      try {
+        const userSettings = await getUserSettings();
+        const match = await findCompany(msg.name, userSettings);
+        sendResponse({ match, risk: calculateRisk(match, null) });
+      } catch (e) {
+        sendResponse({ error: e.message });
+      }
+    })();
     return true;
   }
 
@@ -128,13 +146,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ error: 'invalid names' });
       return false;
     }
-    // 過濾不合理的名字
     const validNames = msg.names.filter(
       (n) => typeof n === 'string' && n.length > 0 && n.length <= 100
     );
     (async () => {
       try {
-        const matches = await findCompanies(validNames);
+        const userSettings = await getUserSettings();
+        const matches = await findCompanies(validNames, userSettings);
         const newsList = await fetchAllNews(validNames, 5);
         const results = matches.map((match, i) => ({
           match,
