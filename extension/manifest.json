@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "求職門神",
-  "version": "0.1.0",
-  "description": "在求職網站浮現公司風險資訊（違規/訴訟/新聞）",
+  "name": "求職門神 JobGuard",
+  "version": "1.0.0",
+  "description": "在 104 求職網站標示公司風險：勞基法違規、勞資訴訟、近期新聞，資料來自政府開放資料，本機運算不上傳。",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

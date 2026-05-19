@@ -3,33 +3,84 @@
 <head>
 <meta charset="UTF-8">
 <title>求職門神 隱私權政策</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: "Microsoft JhengHei", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #222; line-height: 1.7; }
+  body { font-family: "Microsoft JhengHei", "PingFang TC", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #222; line-height: 1.7; }
   h1, h2 { color: #e69138; }
+  h2 { margin-top: 32px; }
+  ul { padding-left: 20px; }
+  code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
+  th { background: #fafafa; }
+  .ok { color: #2e7d32; font-weight: bold; }
+  .muted { color: #888; font-size: 13px; }
 </style>
 </head>
 <body>
-  <h1>求職門神 隱私權政策</h1>
-  <p>最後更新：2026-05-18</p>
+  <h1>求職門神 JobGuard 隱私權政策</h1>
+  <p class="muted">最後更新：2026-05-19</p>
 
-  <h2>不收集任何個人資料</h2>
-  <p>求職門神 Chrome 擴充功能完全在使用者瀏覽器本機運作。我們不收集、不傳送、不儲存任何使用者的個人識別資訊、瀏覽紀錄、或求職活動。</p>
+  <h2>一句話總結</h2>
+  <p>求職門神<strong>不收集、不傳送、不儲存</strong>任何使用者個人資料。所有公司名比對都在你的瀏覽器內完成。</p>
+
+  <h2>我們不蒐集的資料</h2>
+  <table>
+    <tr><th>類別</th><th>蒐集狀態</th></tr>
+    <tr><td>個人識別資訊（姓名、email、電話）</td><td class="ok">不蒐集</td></tr>
+    <tr><td>驗證資訊（密碼、cookies、token）</td><td class="ok">不蒐集</td></tr>
+    <tr><td>瀏覽歷史</td><td class="ok">不蒐集</td></tr>
+    <tr><td>查詢的職缺、公司、關鍵字</td><td class="ok">不蒐集</td></tr>
+    <tr><td>點擊、輸入等使用者活動</td><td class="ok">不蒐集</td></tr>
+    <tr><td>位置資訊</td><td class="ok">不蒐集</td></tr>
+    <tr><td>財務、付款資訊</td><td class="ok">不蒐集</td></tr>
+  </table>
 
   <h2>資料如何運作</h2>
   <ul>
-    <li>違規公司資料來自政府公開資料（新北市資料開放平台），定期下載到使用者瀏覽器的 IndexedDB</li>
-    <li>使用者瀏覽求職網站時，extension 在本機比對公司名 → 顯示風險資訊</li>
-    <li>所有查詢都在本機完成，不會傳送任何資料給開發者或第三方</li>
+    <li>本擴充功能從公開資料源（見下方）下載風險資料，存到使用者瀏覽器本機的 <code>chrome.storage</code> 與 IndexedDB</li>
+    <li>使用者瀏覽 104 等求職網站時，extension 在<strong>本機比對</strong>公司名，顯示對應的風險徽章</li>
+    <li>所有處理過程不會將任何使用者資訊（包含瀏覽中的網址、職缺、公司名）傳送給開發者、伺服器或第三方</li>
+    <li>本機快取的資料完全在使用者瀏覽器內，解除安裝擴充功能即清除</li>
   </ul>
 
-  <h2>外部請求</h2>
-  <p>本 extension 僅向以下公開來源發送請求：</p>
+  <h2>外部請求說明</h2>
+  <p>本擴充功能僅向以下公開來源發送 HTTP 請求：</p>
+  <table>
+    <tr><th>網域</th><th>用途</th><th>請求內容</th></tr>
+    <tr>
+      <td><code>ryan-mkt.github.io</code></td>
+      <td>下載每日更新的政府違規資料 JSON</td>
+      <td>固定 URL，不含使用者識別資訊</td>
+    </tr>
+    <tr>
+      <td><code>news.google.com</code></td>
+      <td>查詢公司名對應的公開新聞 RSS</td>
+      <td>僅含公司名關鍵字，不含使用者識別資訊</td>
+    </tr>
+  </table>
+
+  <h2>資料來源（皆為公開資料）</h2>
   <ul>
-    <li>GitHub Pages（取得最新違規資料集）</li>
-    <li>Google News RSS（查詢公司相關新聞）</li>
+    <li>新北市資料開放平台 — 違反勞動基準法事業單位（CC-BY 4.0）</li>
+    <li>司法院判決書開放資料（勞資相關判決）</li>
+    <li>Google News RSS（公開新聞）</li>
   </ul>
 
-  <h2>聯絡</h2>
-  <p>問題回報：<a href="https://github.com/Ryan-MKT/jobguard/issues">GitHub Issues</a></p>
+  <h2>第三方服務</h2>
+  <p>本擴充功能不使用任何分析工具（Google Analytics、Mixpanel 等）、廣告 SDK 或追蹤腳本。</p>
+
+  <h2>與其他平台的關係</h2>
+  <p>求職門神為獨立開源專案，<strong>非 104 人力銀行官方產品</strong>，與 104、1111、yes123 等求職平台無任何合作或從屬關係。所有顯示資料皆來自公開資料源的整理呈現，不構成任何法律或就業建議。</p>
+
+  <h2>變更通知</h2>
+  <p>若本政策有重大變更，將於本頁面更新並調整「最後更新日」。重大變更會在發佈新版本時於 Chrome Web Store 更新說明告知。</p>
+
+  <h2>聯絡方式</h2>
+  <ul>
+    <li>資安問題：<a href="mailto:ryan@mktersalon.com">ryan@mktersalon.com</a>（標題請註明 <code>[Security] 求職門神</code>）</li>
+    <li>一般問題回報：<a href="https://github.com/Ryan-MKT/jobguard/issues">GitHub Issues</a></li>
+    <li>原始碼：<a href="https://github.com/Ryan-MKT/jobguard">github.com/Ryan-MKT/jobguard</a></li>
+  </ul>
 </body>
 </html>
