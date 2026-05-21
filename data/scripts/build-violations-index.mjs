@@ -40,12 +40,29 @@ function normalizeName(rawName) {
   return n.trim();
 }
 
+// 法人全名正規化（高信心 exact 比對用）：
+// 保留「股份有限公司/有限公司」後綴（保留後綴才讓名稱接近唯一），只去 (即XXX) 與結尾 (負責人)
+function canonicalLegalName(rawName) {
+  if (!rawName || typeof rawName !== 'string') return null;
+  let n = rawName.trim();
+  if (!n) return null;
+  const ji = n.match(/[(（]\s*即\s*([^)）]+)\s*[)）]/);
+  if (ji) n = ji[1].trim();
+  const m = n.match(/^(.+?)\s*[(（][^)）]+[)）]\s*$/);
+  if (m) {
+    const before = m[1].trim();
+    if (before && !before.startsWith('(') && !before.startsWith('（')) n = before;
+  }
+  return n.trim();
+}
+
 async function main() {
   console.log('📖 讀取勞動部全國資料...');
   const raw = JSON.parse(await readFile(RAW_FILE, 'utf-8'));
   console.log(`   共 ${raw.length.toLocaleString()} 筆`);
 
   const byCompany = new Map();
+  const legalIndex = new Map(); // 完整法人全名(正規化) → 去後綴 key（高信心 exact 比對用）
   const byCity = {};
   const byLawType = {};
   let skipped = 0;
@@ -94,6 +111,12 @@ async function main() {
       docno: (rec.docno || '').trim(),
     });
 
+    // 完整法人全名 → key 對照（保留後綴，近乎唯一識別）
+    const legalKey = canonicalLegalName(rec.name);
+    if (legalKey && legalKey.length >= 2 && !legalIndex.has(legalKey)) {
+      legalIndex.set(legalKey, normalized);
+    }
+
     // 統計
     byCity[rec.city] = (byCity[rec.city] || 0) + 1;
     byLawType[rec.lawType] = (byLawType[rec.lawType] || 0) + 1;
@@ -117,7 +140,7 @@ async function main() {
   }
 
   const output = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     updatedAt: new Date().toISOString(),
     source: '勞動部違反勞動法令事業單位查詢系統（全國彙整）',
     sourceUrl: 'https://announcement.mol.gov.tw/',
@@ -125,10 +148,12 @@ async function main() {
     coveredLaws: Object.keys(byLawType).length,
     totalRecords: raw.length,
     uniqueCompanies: byCompany.size,
+    legalNameCount: legalIndex.size,
     dateRange: { earliest: earliestDate, latest: latestDate },
     byCity,
     byLawType,
     index,
+    legalIndex: Object.fromEntries(legalIndex), // 法人全名 → key
   };
 
   await mkdir(OUT_DIR, { recursive: true });

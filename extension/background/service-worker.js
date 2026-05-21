@@ -2,7 +2,7 @@
 // 求職門神 - 背景 Service Worker
 // ============================================
 
-import { replaceAllCompanies, setMeta, getMeta } from './db.js';
+import { replaceAllCompanies, setMeta, getMeta, setLegalIndex } from './db.js';
 import { findCompany, findCompanies } from './matcher.js';
 import { calculateRisk } from './scorer.js';
 import { fetchAllNews } from './news.js';
@@ -52,6 +52,7 @@ async function syncViolations() {
     );
 
     const writtenCount = await replaceAllCompanies(data.index);
+    await setLegalIndex(data.legalIndex || {}); // 法人全名 → key（schemaVersion ≥ 4）
     await setMeta({
       schemaVersion: data.schemaVersion,
       dataUpdatedAt: data.updatedAt,
@@ -131,7 +132,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         const userSettings = await getUserSettings();
-        const match = await findCompany(msg.name, userSettings);
+        const match = await findCompany(msg.name, {
+          ...userSettings,
+          legalName: typeof msg.legal === 'string' ? msg.legal : undefined,
+          city: typeof msg.city === 'string' ? msg.city : undefined,
+        });
         sendResponse({ match, risk: calculateRisk(match, null) });
       } catch (e) {
         sendResponse({ error: e.message });
@@ -146,13 +151,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ error: 'invalid names' });
       return false;
     }
-    const validNames = msg.names.filter(
-      (n) => typeof n === 'string' && n.length > 0 && n.length <= 100
-    );
+    // 保留索引對齊：names / legals / cities 同步過濾
+    const items = msg.names
+      .map((n, i) => ({
+        name: n,
+        legal: Array.isArray(msg.legals) ? msg.legals[i] : undefined,
+        city: Array.isArray(msg.cities) ? msg.cities[i] : undefined,
+      }))
+      .filter((it) => typeof it.name === 'string' && it.name.length > 0 && it.name.length <= 100);
+    const validNames = items.map((it) => it.name);
+    const legals = items.map((it) => (typeof it.legal === 'string' && it.legal.length <= 100 ? it.legal : undefined));
+    const cities = items.map((it) => (typeof it.city === 'string' && it.city.length <= 20 ? it.city : undefined));
     (async () => {
       try {
         const userSettings = await getUserSettings();
-        const matches = await findCompanies(validNames, userSettings);
+        const matches = await findCompanies(validNames, { ...userSettings, legals, cities });
         const newsList = await fetchAllNews(validNames, 10);
         const results = matches.map((match, i) => ({
           match,

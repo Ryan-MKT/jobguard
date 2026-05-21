@@ -136,3 +136,24 @@ export async function getMeta() {
     req.onerror = () => reject(req.error);
   });
 }
+
+// 法人全名 → key 對照表（高信心比對用）。存在 meta store 的 'legalIndex' 鍵
+export async function setLegalIndex(legalIndex) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_META, 'readwrite');
+    tx.objectStore(STORE_META).put(legalIndex || {}, 'legalIndex');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getLegalIndex() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_META, 'readonly');
+    const req = tx.objectStore(STORE_META).get('legalIndex');
+    req.onsuccess = () => resolve(req.result || {});
+    req.onerror = () => reject(req.error);
+  });
+}

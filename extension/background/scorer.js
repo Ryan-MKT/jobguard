@@ -22,7 +22,9 @@ export function calculateRisk(match, news) {
     const reasons = [];
     reasons.push(`政府裁罰 ${match.count} 次`);
     // 罰款金額刻意隱藏：露出可能造成誤解 / 名譽爭議，使用者要查實際金額可走 docno 申請
-    if (match.confidence < 0.8) {
+    if (match.matchType === 'legal-exact') {
+      reasons.push('✅ 法人全名核實');
+    } else if (match.confidence < 0.8) {
       reasons.push(`模糊比對 ${(match.confidence * 100).toFixed(0)}% 信心`);
     }
     if (hasNews) {

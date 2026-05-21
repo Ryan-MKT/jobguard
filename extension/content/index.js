@@ -117,8 +117,25 @@
       'color: #e69138; font-weight: bold;'
     );
 
+    // ⭐ 法人全名增益（若 parser 支援）：拿法人全名 + 縣市，讓 matcher 做高信心比對
+    //    失敗則送空陣列 → matcher 自動 fallback 回品牌名，不會比原本差
+    let legals = [];
+    let cities = [];
+    if (typeof activeParser.enrich === 'function' && typeof activeParser.extractHashId === 'function') {
+      try {
+        const repHash = uniqueNames.map((name) => activeParser.extractHashId(byName.get(name)[0].url));
+        const legalMap = await activeParser.enrich(repHash);
+        legals = repHash.map((h) => (h && legalMap.get(h) ? legalMap.get(h).legal : undefined));
+        cities = repHash.map((h) => (h && legalMap.get(h) ? legalMap.get(h).city : undefined));
+        const enriched = legals.filter(Boolean).length;
+        console.log(`%c🏷️ [${activeParser.id}] 取得 ${enriched}/${uniqueNames.length} 家法人全名`, 'color: #6aa84f;');
+      } catch (e) {
+        console.warn('[JobGuard] 法人名增益失敗，改用品牌名比對:', e?.message || e);
+      }
+    }
+
     const t0 = Date.now();
-    const results = await sendToSW({ type: 'findCompanies', names: uniqueNames });
+    const results = await sendToSW({ type: 'findCompanies', names: uniqueNames, legals, cities });
     const elapsed = Date.now() - t0;
 
     // ⭐ 替換 loading 為實際徽章
