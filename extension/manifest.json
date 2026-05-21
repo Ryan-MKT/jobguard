@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "求職門神 JobGuard",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "在求職網站自動標示公司勞基法違規、勞資訴訟與近期新聞（首發支援 104，後續擴充 1111、yes123 等）。資料來自政府開放資料，本機運算不上傳。",
   "icons": {
     "16": "icons/icon-16.png",
